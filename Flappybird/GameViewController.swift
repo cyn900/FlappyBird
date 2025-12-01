@@ -1,45 +1,20 @@
-//
-//  GameViewController.swift
-//  Flappybird
-//
-//  Created by Cynthia Zhou on 2025-11-03.
-//
-
 import UIKit
 import SpriteKit
-import GameplayKit
 
+
+// MARK: - View Controller
 class GameViewController: UIViewController {
-
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        if let view = self.view as! SKView? {
-            // Load the SKScene from 'GameScene.sks'
-            if let scene = SKScene(fileNamed: "GameScene") {
-                // Set the scale mode to scale to fit the window
-                scene.scaleMode = .aspectFill
-                
-                // Present the scene
-                view.presentScene(scene)
-            }
-            
-            view.ignoresSiblingOrder = true
-            
-            view.showsFPS = true
-            view.showsNodeCount = true
-        }
-    }
-
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            return .allButUpsideDown
-        } else {
-            return .all
-        }
-    }
-
-    override var prefersStatusBarHidden: Bool {
-        return true
+        // Create the SpriteKit view
+        let skView = SKView(frame: view.bounds)
+        view.addSubview(skView)
+        
+        // Create and present the scene
+        let scene = GameScene(size: skView.bounds.size)
+        scene.scaleMode = .aspectFill
+        skView.presentScene(scene)
     }
 }
