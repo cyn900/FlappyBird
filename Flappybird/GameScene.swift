@@ -4,7 +4,6 @@
 //
 //  Created by Cynthia Zhou on 2025-11-24.
 //
-
 import SpriteKit
 import GameplayKit
 import UIKit
@@ -17,7 +16,7 @@ class NeuralNetwork {
     var bias2: [Double]
     
     init() {
-        weights1 = (0..<8).map { _ in (0..<4).map { _ in Double.random(in: -1...1) } }
+        weights1 = (0..<8).map { _ in (0..<5).map { _ in Double.random(in: -1...1) } }
         weights2 = (0..<1).map { _ in (0..<8).map { _ in Double.random(in: -1...1) } }
         bias1 = (0..<8).map { _ in Double.random(in: -1...1) }
         bias2 = (0..<1).map { _ in Double.random(in: -1...1) }
@@ -38,7 +37,7 @@ class NeuralNetwork {
         var hidden = [Double](repeating: 0, count: 8)
         for i in 0..<8 {
             var sum = bias1[i]
-            for j in 0..<4 {
+            for j in 0..<5 {
                 sum += inputs[j] * weights1[i][j]
             }
             hidden[i] = sigmoid(sum)
@@ -139,11 +138,13 @@ class BirdAgent {
     
     func think(birdY: Double, topY: Double, botY: Double, dist: Double, h: Double) {
         guard alive else { return }
+        let vel = node.physicsBody?.velocity.dy ?? 0
         let inputs: [Double] = [
             birdY / h,
             topY / h,
             botY / h,
-            min(dist, 400) / 400.0
+            min(dist, 400) / 400.0,
+            Double(vel) / 50.0  // Normalized velocity
         ]
         if brain.predict(inputs: inputs) > 0.5 {
             flap()
