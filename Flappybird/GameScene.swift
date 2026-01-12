@@ -9,8 +9,10 @@ import SpriteKit
 import UIKit
 
 private enum PhysicsCategory {
-    static let bird: UInt32 = 1 << 0
-    static let pipe: UInt32 = 1 << 1
+    static let bird: UInt32   = 1 << 0
+    static let pipe: UInt32   = 1 << 1
+    static let ground: UInt32 = 1 << 2
+    static let ceiling: UInt32 = 1 << 3
 }
 
 final class Pipe {
@@ -136,6 +138,24 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         groundNode = g
         ceilingNode = c
+        
+        // Ground physics
+        groundNode.physicsBody = SKPhysicsBody(rectangleOf: groundNode.size)
+        groundNode.physicsBody?.isDynamic = false
+        groundNode.physicsBody?.restitution = 0
+        groundNode.physicsBody?.friction = 0
+        groundNode.physicsBody?.categoryBitMask = PhysicsCategory.ground
+        groundNode.physicsBody?.contactTestBitMask = PhysicsCategory.bird
+        groundNode.physicsBody?.collisionBitMask = PhysicsCategory.bird
+
+        // Ceiling physics
+        ceilingNode.physicsBody = SKPhysicsBody(rectangleOf: ceilingNode.size)
+        ceilingNode.physicsBody?.isDynamic = false
+        ceilingNode.physicsBody?.restitution = 0
+        ceilingNode.physicsBody?.friction = 0
+        ceilingNode.physicsBody?.categoryBitMask = PhysicsCategory.ceiling
+        ceilingNode.physicsBody?.contactTestBitMask = PhysicsCategory.bird
+        ceilingNode.physicsBody?.collisionBitMask = PhysicsCategory.bird
 
         scoreLbl = childNode(withName: "//scoreLabel") as? SKLabelNode
         bestLbl  = childNode(withName: "//bestLabel")  as? SKLabelNode
@@ -210,8 +230,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         body.pinned = false
 
         body.categoryBitMask = PhysicsCategory.bird
-        body.contactTestBitMask = PhysicsCategory.pipe
-        body.collisionBitMask = PhysicsCategory.pipe
+        body.contactTestBitMask = PhysicsCategory.pipe | PhysicsCategory.ground | PhysicsCategory.ceiling
+        body.collisionBitMask = PhysicsCategory.pipe | PhysicsCategory.ground | PhysicsCategory.ceiling
 
         world.addChild(bird)
 
@@ -277,9 +297,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     func didBegin(_ contact: SKPhysicsContact) {
         let a = contact.bodyA.categoryBitMask
         let b = contact.bodyB.categoryBitMask
-        let hitPipe = (a == PhysicsCategory.bird && b == PhysicsCategory.pipe) ||
-                      (b == PhysicsCategory.bird && a == PhysicsCategory.pipe)
-        if hitPipe { triggerGameOver() }
+
+        let birdHitSomething =
+            (a == PhysicsCategory.bird && (b == PhysicsCategory.pipe || b == PhysicsCategory.ground || b == PhysicsCategory.ceiling)) ||
+            (b == PhysicsCategory.bird && (a == PhysicsCategory.pipe || a == PhysicsCategory.ground || a == PhysicsCategory.ceiling))
+
+        if birdHitSomething {
+            triggerGameOver()
+        }
     }
 
     private func triggerGameOver() {
@@ -324,11 +349,5 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
-        let groundTopWorld = sceneYToWorld(groundNode.frame.maxY)
-        let ceilingBottomWorld = sceneYToWorld(ceilingNode.frame.minY)
-        let y = bird.position.y
-        if y < groundTopWorld || y > ceilingBottomWorld {
-            triggerGameOver()
-        }
     }
 }
