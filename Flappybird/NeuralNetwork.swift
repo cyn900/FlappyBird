@@ -1,14 +1,12 @@
 import Foundation
-import UIKit
 
 // MARK: - Simple Neural Network (4 → 8 → 1)
-
 final class NeuralNetwork {
 
     var w1: [[Double]]   // 8 x 4
-    var w2: [Double]    // 1 x 8
-    var b1: [Double]   // 8
-    var b2: Double     // 1
+    var w2: [Double]     // 8
+    var b1: [Double]     // 8
+    var b2: Double       // 1
 
     init(random: Bool = true) {
         if random {
@@ -34,7 +32,7 @@ final class NeuralNetwork {
     }
 
     private func sigmoid(_ x: Double) -> Double {
-        return 1.0 / (1.0 + exp(-max(-20, min(20, x))))
+        1.0 / (1.0 + exp(-max(-20, min(20, x))))
     }
 
     // inputs = [birdY, topY, botY, dist] normalized
@@ -57,94 +55,59 @@ final class NeuralNetwork {
         return sigmoid(out)
     }
 
-    func mutate(rate: Double) {
-        for i in 0..<8 {
-            for j in 0..<4 {
-                if Double.random(in: 0...1) < rate {
-                    w1[i][j] += Double.random(in: -0.4...0.4)
-                }
-            }
-            if Double.random(in: 0...1) < rate {
-                b1[i] += Double.random(in: -0.4...0.4)
-            }
-            if Double.random(in: 0...1) < rate {
-                w2[i] += Double.random(in: -0.4...0.4)
-            }
-        }
-
-        if Double.random(in: 0...1) < rate {
-            b2 += Double.random(in: -0.4...0.4)
-        }
-    }
-
-    static func crossover(_ a: NeuralNetwork, _ b: NeuralNetwork) -> NeuralNetwork {
+    // MARK: - Simple "learn from parents": average
+    static func average(_ a: NeuralNetwork, _ b: NeuralNetwork) -> NeuralNetwork {
         let c = NeuralNetwork(random: false)
 
         for i in 0..<8 {
             for j in 0..<4 {
-                c.w1[i][j] = Bool.random() ? a.w1[i][j] : b.w1[i][j]
+                c.w1[i][j] = (a.w1[i][j] + b.w1[i][j]) * 0.5
             }
-            c.b1[i] = Bool.random() ? a.b1[i] : b.b1[i]
-            c.w2[i] = Bool.random() ? a.w2[i] : b.w2[i]
+            c.b1[i] = (a.b1[i] + b.b1[i]) * 0.5
+            c.w2[i] = (a.w2[i] + b.w2[i]) * 0.5
         }
-
-        c.b2 = Bool.random() ? a.b2 : b.b2
+        c.b2 = (a.b2 + b.b2) * 0.5
         return c
+    }
+
+    // MARK: - Tiny mutation (minimum needed)
+    // This is NOT "overcomplicated": it just nudges a few numbers slightly.
+    func tinyMutate(chance: Double = 0.03, amount: Double = 0.08) {
+        for i in 0..<8 {
+            for j in 0..<4 {
+                if Double.random(in: 0...1) < chance {
+                    w1[i][j] += Double.random(in: -amount...amount)
+                }
+            }
+            if Double.random(in: 0...1) < chance { b1[i] += Double.random(in: -amount...amount) }
+            if Double.random(in: 0...1) < chance { w2[i] += Double.random(in: -amount...amount) }
+        }
+        if Double.random(in: 0...1) < chance { b2 += Double.random(in: -amount...amount) }
     }
 }
 
-
-
-
-
-
-// MARK: - Genome (one bird brain + stats)
-
+// MARK: - Genome
 final class Genome {
     let brain: NeuralNetwork
     var alive: Bool = true
     var score: Int = 0
     var distance: Double = 0
 
-    init(brain: NeuralNetwork) {
-        self.brain = brain
-    }
+    init(brain: NeuralNetwork) { self.brain = brain }
 
-    var fitness: Double {
-        // score dominates, distance breaks ties
-        return Double(score) * 1000 + distance
-    }
+    var fitness: Double { Double(score) * 1000 + distance }
 }
 
-
-
-
-
-
-// MARK: - Flappy AI (Genetic Algorithm Manager)
-
+// MARK: - Flappy AI
 final class FlappyAI {
 
     private let popSize: Int
     private(set) var generation: Int = 1
-
     private var genomes: [Genome] = []
 
     init(popSize: Int) {
         self.popSize = popSize
-        createInitialPopulation()
-    }
-
-    private func createInitialPopulation() {
-        genomes = (0..<popSize).map { _ in
-            Genome(brain: NeuralNetwork())
-        }
-    }
-
-    // MARK: - Run control (called by GameScene)
-
-    func currentSpawnPack() -> [NeuralNetwork] {
-        return genomes.map { ($0.brain) }
+        genomes = (0..<popSize).map { _ in Genome(brain: NeuralNetwork()) }
     }
 
     func resetRunState() {
@@ -156,17 +119,13 @@ final class FlappyAI {
     }
 
     func tickAlive(i: Int, distance: Double) {
-        guard i < genomes.count else { return }
-        if genomes[i].alive {
-            genomes[i].distance = max(genomes[i].distance, distance)
-        }
+        guard i < genomes.count, genomes[i].alive else { return }
+        genomes[i].distance = max(genomes[i].distance, distance)
     }
 
     func addScore(i: Int) {
-        guard i < genomes.count else { return }
-        if genomes[i].alive {
-            genomes[i].score += 1
-        }
+        guard i < genomes.count, genomes[i].alive else { return }
+        genomes[i].score += 1
     }
 
     func kill(i: Int) {
@@ -174,38 +133,20 @@ final class FlappyAI {
         genomes[i].alive = false
     }
 
-    // MARK: - Decision
-
-    func shouldFlap(
-        birdIndex: Int,
-        birdY: Double,
-        topY: Double,
-        botY: Double,
-        dist: Double,
-        height: Double
-    ) -> Bool {
-
+    func shouldFlap(birdIndex: Int, birdY: Double, topY: Double, botY: Double, dist: Double, height: Double) -> Bool {
         let g = genomes[birdIndex]
         guard g.alive else { return false }
 
-        // normalize inputs to ~0–1 range
         let inputs: [Double] = [
             birdY / height,
             topY / height,
             botY / height,
             min(dist, 600) / 600.0
         ]
-
-        let out = g.brain.predict(inputs)
-
-        // flap threshold (tune this!)
-        return out > 0.5
+        return g.brain.predict(inputs) > 0.5
     }
 
-    // MARK: - Evolution
-
     func evolveToNextGen() {
-        // sort by fitness descending
         genomes.sort { $0.fitness > $1.fitness }
 
         let eliteCount = max(2, popSize / 10)
@@ -213,25 +154,24 @@ final class FlappyAI {
 
         var newGen: [Genome] = []
 
-        // keep elites unchanged
+        // 1) keep elites
         for e in elites {
             newGen.append(Genome(brain: e.brain.copy()))
         }
 
-        // fill rest by crossover + mutation
+        // 2) children = average of 2 elites + tiny mutation
         while newGen.count < popSize {
             let p1 = elites.randomElement()!
             let p2 = elites.randomElement()!
 
-            let childBrain = NeuralNetwork.crossover(p1.brain, p2.brain)
-            childBrain.mutate(rate: 0.15)
+            let child = NeuralNetwork.average(p1.brain, p2.brain)
+            child.tinyMutate(chance: 0.03, amount: 0.08)
 
-            newGen.append(Genome(brain: childBrain))
+            newGen.append(Genome(brain: child))
         }
 
         genomes = newGen
         generation += 1
-
-        print("=== Generation \(generation) ===")
+        print("=== Generation \(generation) === best fitness \(genomes.first?.fitness ?? 0)")
     }
 }

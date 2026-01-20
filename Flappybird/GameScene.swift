@@ -218,7 +218,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         runTime = 0
         ai.resetRunState() // resets alive/score/distance for this run (brains stay)
-        let spawnPack = ai.currentSpawnPack() 
+        // spawn birds stacked slightly so you can see many
 
         // spawn birds stacked slightly so you can see many
         let birdXScene = frame.minX + frame.width * 0.2
