@@ -88,10 +88,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Multi birds
     private var birds: [SKSpriteNode] = []
-    private let birdCount = 30
+    private let birdCount = 100
     
     // NN manager (from your NN file)
-    private let ai = FlappyAI(popSize: 30)
+    private lazy var ai = FlappyAI(popSize: birdCount)
 
     // simple time counter for fitness distance
     private var runTime: Double = 0
@@ -218,7 +218,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         
         runTime = 0
         ai.resetRunState() // resets alive/score/distance for this run (brains stay)
-        let spawnPack = ai.currentSpawnPack() // [(brain,color)] in order
+        let spawnPack = ai.currentSpawnPack() 
 
         // spawn birds stacked slightly so you can see many
         let birdXScene = frame.minX + frame.width * 0.2
@@ -463,3 +463,4 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 }
+

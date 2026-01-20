@@ -105,16 +105,9 @@ final class Genome {
     var alive: Bool = true
     var score: Int = 0
     var distance: Double = 0
-    let color: UIColor
 
     init(brain: NeuralNetwork) {
         self.brain = brain
-        self.color = UIColor(
-            hue: CGFloat.random(in: 0...1),
-            saturation: 0.8,
-            brightness: 0.9,
-            alpha: 1.0
-        )
     }
 
     var fitness: Double {
@@ -150,8 +143,8 @@ final class FlappyAI {
 
     // MARK: - Run control (called by GameScene)
 
-    func currentSpawnPack() -> [(brain: NeuralNetwork, color: UIColor)] {
-        return genomes.map { ($0.brain, $0.color) }
+    func currentSpawnPack() -> [NeuralNetwork] {
+        return genomes.map { ($0.brain) }
     }
 
     func resetRunState() {
@@ -240,8 +233,5 @@ final class FlappyAI {
         generation += 1
 
         print("=== Generation \(generation) ===")
-        if let best = genomes.first {
-            print("Best fitness:", best.fitness)
-        }
     }
 }
