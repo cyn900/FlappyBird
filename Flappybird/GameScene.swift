@@ -20,6 +20,8 @@ final class Pipe {
     let node: SKNode
     let top: SKSpriteNode
     let bot: SKSpriteNode
+    let gapTopY: CGFloat
+    let gapBotY: CGFloat
 
     var passed = false
     var x: CGFloat { node.position.x }
@@ -30,7 +32,7 @@ final class Pipe {
         gapYInWorld: CGFloat,
         gap: CGFloat,
         worldMinY: CGFloat,
-        worldMaxY: CGFloat
+        worldMaxY: CGFloat,
     ) {
         guard let copy = template.copy() as? SKNode else {
             fatalError("pipePrototype must be an SKNode")
@@ -50,6 +52,8 @@ final class Pipe {
 
         let gapTopY = gapYInWorld + gap * 0.5
         let gapBotY = gapYInWorld - gap * 0.5
+        self.gapTopY = gapTopY
+        self.gapBotY = gapBotY
 
         let topH = max(10, worldMaxY - gapTopY)
         let botH = max(10, gapBotY - worldMinY)
@@ -88,7 +92,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Multi birds
     private var birds: [SKSpriteNode] = []
-    private let birdCount = 200
+    private let birdCount = 1000
     
     // NN manager (from your NN file)
     private lazy var ai = FlappyAI(popSize: birdCount)
@@ -270,22 +274,19 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Pipes
     private func spawnPipe() {
-        let groundTopScene = groundNode.frame.maxY
-        let ceilingBottomScene = ceilingNode.frame.minY
+        let worldMinY = groundNode.frame.maxY
+        let worldMaxY = ceilingNode.frame.minY
 
-        let worldMinY = sceneYToWorld(groundTopScene)
-        let worldMaxY = sceneYToWorld(ceilingBottomScene)
+        let minGapCenter = worldMinY + pipeGap * 0.5
+        let maxGapCenter = worldMaxY - pipeGap * 0.5
 
-        let minGapCenterScene = groundTopScene + pipeGap * 0.5
-        let maxGapCenterScene = ceilingBottomScene - pipeGap * 0.5
-
-        let gapYScene: CGFloat
-        if minGapCenterScene < maxGapCenterScene {
-            gapYScene = CGFloat.random(in: minGapCenterScene...maxGapCenterScene)
+        let gapYWorld: CGFloat
+        if minGapCenter < maxGapCenter {
+            gapYWorld = CGFloat.random(in: minGapCenter...maxGapCenter)
         } else {
-            gapYScene = (groundTopScene + ceilingBottomScene) * 0.5
+            gapYWorld = (worldMinY + worldMaxY) * 0.5
         }
-        let gapYWorld = sceneYToWorld(gapYScene)
+
         let xWorld = sceneXToWorld(frame.maxX + 60)
 
         let pipe = Pipe(
@@ -331,6 +332,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let b = birds[idx]
         b.alpha = 0
         b.physicsBody?.isDynamic = false
+        ai.tickAlive(i: idx, distance: runTime)
         ai.kill(i: idx)
 
         // if all dead => game over
@@ -388,21 +390,18 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         
         // ===== NN autoplay for each alive bird =====
+        // playable height in WORLD coords (✅ no extra convert)
+        let worldMinY = groundNode.frame.maxY
+        let worldMaxY = ceilingNode.frame.minY
+        let h = Double(worldMaxY - worldMinY)
 
-        // closest upcoming pipe for decision
-        // (use a reference x near where birds start)
+        // choose ONE next pipe for all birds (more stable)
         let refX = sceneXToWorld(frame.minX + frame.width * 0.2)
         let nextPipe = pipes.first { $0.x + 22 > refX }
-
-        // playable height in WORLD coords
-        let worldMinY = sceneYToWorld(groundNode.frame.maxY)
-        let worldMaxY = sceneYToWorld(ceilingNode.frame.minY)
-        let h = Double(worldMaxY - worldMinY)
 
         for (i, b) in birds.enumerated() {
             guard let body = b.physicsBody, body.isDynamic else { continue }
 
-            // keep distance updated for fitness
             ai.tickAlive(i: i, distance: runTime)
 
             let birdY = Double(b.position.y - worldMinY)
@@ -412,18 +411,18 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             let dist: Double
 
             if let p = nextPipe {
-                // gap edges in WORLD coords
-                topY = Double(p.top.frame.minY - worldMinY)  // bottom edge of top pipe
-                botY = Double(p.bot.frame.maxY - worldMinY)  // top edge of bottom pipe
-                dist = Double(p.x - b.position.x)
+                topY = Double(p.gapTopY - worldMinY)   // ✅ use stored gap edges (better than frame)
+                botY = Double(p.gapBotY - worldMinY)
+                dist = Double(max(0, p.x - b.position.x))
             } else {
                 topY = h
                 botY = 0
                 dist = 600
             }
+            
+            let velY = Double(body.velocity.dy)
 
-            if ai.shouldFlap(birdIndex: i, birdY: birdY, topY: topY, botY: botY, dist: dist, height: h) {
-                // same mass-proof flap as before
+            if ai.shouldFlap(birdIndex: i, birdY: birdY, topY: topY, botY: botY, dist: dist, height: h, velY: velY) {
                 body.velocity = CGVector(dx: body.velocity.dx, dy: flapVelocityTarget)
             }
         }
@@ -446,7 +445,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         if let lead = aliveBirds.max(by: { $0.position.x < $1.position.x }) {
             let leadX = lead.position.x
             for p in pipes {
-                if !p.passed && p.x + 22 < leadX {
+                if !p.passed && p.x + 35 < leadX {
                     p.passed = true
                     score += 1
                     best = max(best, score)

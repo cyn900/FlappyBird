@@ -1,12 +1,16 @@
 import Foundation
 
-// MARK: - Simple Neural Network (4 → 8 → 1)
+// MARK: - Neural Network (4 → 8 → 1)
 final class NeuralNetwork {
 
-    var w1: [[Double]]   // 8 x 4
-    var w2: [Double]     // 8
-    var b1: [Double]     // 8
-    var b2: Double       // 1
+    // 8 x 4
+    var w1: [[Double]]
+    // 8
+    var w2: [Double]
+    // 8
+    var b1: [Double]
+    // 1
+    var b2: Double
 
     init(random: Bool = true) {
         if random {
@@ -32,61 +36,57 @@ final class NeuralNetwork {
     }
 
     private func sigmoid(_ x: Double) -> Double {
-        1.0 / (1.0 + exp(-max(-20, min(20, x))))
+        // wide clamp to avoid saturation & overflow
+        let z = max(-60, min(60, x))
+        return 1.0 / (1.0 + exp(-z))
     }
 
-    // inputs = [birdY, topY, botY, dist] normalized
+    // inputs must be count=4, normalized
     func predict(_ inputs: [Double]) -> Double {
         var hidden = [Double](repeating: 0, count: 8)
 
         for i in 0..<8 {
             var sum = b1[i]
-            for j in 0..<4 {
-                sum += inputs[j] * w1[i][j]
-            }
+            for j in 0..<4 { sum += inputs[j] * w1[i][j] }
             hidden[i] = sigmoid(sum)
         }
 
         var out = b2
-        for i in 0..<8 {
-            out += hidden[i] * w2[i]
-        }
-
+        for i in 0..<8 { out += hidden[i] * w2[i] }
         return sigmoid(out)
     }
 
-    // MARK: - Simple "learn from parents": average
-    static func average(_ a: NeuralNetwork, _ b: NeuralNetwork) -> NeuralNetwork {
+    // MARK: - Crossover
+    static func crossover(_ a: NeuralNetwork, _ b: NeuralNetwork) -> NeuralNetwork {
         let c = NeuralNetwork(random: false)
 
         for i in 0..<8 {
             for j in 0..<4 {
-                c.w1[i][j] = (a.w1[i][j] + b.w1[i][j]) * 0.5
+                c.w1[i][j] = Bool.random() ? a.w1[i][j] : b.w1[i][j]
             }
-            c.b1[i] = (a.b1[i] + b.b1[i]) * 0.5
-            c.w2[i] = (a.w2[i] + b.w2[i]) * 0.5
+            c.w2[i] = Bool.random() ? a.w2[i] : b.w2[i]
+            c.b1[i] = Bool.random() ? a.b1[i] : b.b1[i]
         }
-        c.b2 = (a.b2 + b.b2) * 0.5
+        c.b2 = Bool.random() ? a.b2 : b.b2
         return c
     }
 
-    // MARK: - Tiny mutation (minimum needed)
-    // This is NOT "overcomplicated": it just nudges a few numbers slightly.
-    func tinyMutate(chance: Double = 0.03, amount: Double = 0.08) {
+    // MARK: - Mutation
+    func mutate(rate: Double, amount: Double) {
         for i in 0..<8 {
             for j in 0..<4 {
-                if Double.random(in: 0...1) < chance {
+                if Double.random(in: 0...1) < rate {
                     w1[i][j] += Double.random(in: -amount...amount)
                 }
             }
-            if Double.random(in: 0...1) < chance { b1[i] += Double.random(in: -amount...amount) }
-            if Double.random(in: 0...1) < chance { w2[i] += Double.random(in: -amount...amount) }
+            if Double.random(in: 0...1) < rate { w2[i] += Double.random(in: -amount...amount) }
+            if Double.random(in: 0...1) < rate { b1[i] += Double.random(in: -amount...amount) }
         }
-        if Double.random(in: 0...1) < chance { b2 += Double.random(in: -amount...amount) }
+        if Double.random(in: 0...1) < rate { b2 += Double.random(in: -amount...amount) }
     }
 }
 
-// MARK: - Genome
+// MARK: - Genome (one brain + run stats)
 final class Genome {
     let brain: NeuralNetwork
     var alive: Bool = true
@@ -95,21 +95,28 @@ final class Genome {
 
     init(brain: NeuralNetwork) { self.brain = brain }
 
-    var fitness: Double { Double(score) * 1000 + distance }
+    // score dominates, distance breaks ties
+    var fitness: Double { Double(score) * 1000.0 + distance }
 }
 
-// MARK: - Flappy AI
+// MARK: - Flappy AI (multi-generation evolution with Hall-of-Fame)
 final class FlappyAI {
 
     private let popSize: Int
     private(set) var generation: Int = 1
     private var genomes: [Genome] = []
 
+    // ✅ Real hall-of-fame with fitness stored
+    private var hall: [(fitness: Double, brain: NeuralNetwork)] = []
+    private var bestEver: (fitness: Double, brain: NeuralNetwork)? = nil
+    private let hallSize: Int = 10
+
     init(popSize: Int) {
         self.popSize = popSize
-        genomes = (0..<popSize).map { _ in Genome(brain: NeuralNetwork()) }
+        self.genomes = (0..<popSize).map { _ in Genome(brain: NeuralNetwork()) }
     }
 
+    // MARK: - Run state
     func resetRunState() {
         for g in genomes {
             g.alive = true
@@ -119,59 +126,134 @@ final class FlappyAI {
     }
 
     func tickAlive(i: Int, distance: Double) {
-        guard i < genomes.count, genomes[i].alive else { return }
+        guard i >= 0, i < genomes.count, genomes[i].alive else { return }
         genomes[i].distance = max(genomes[i].distance, distance)
     }
 
     func addScore(i: Int) {
-        guard i < genomes.count, genomes[i].alive else { return }
+        guard i >= 0, i < genomes.count, genomes[i].alive else { return }
         genomes[i].score += 1
     }
 
     func kill(i: Int) {
-        guard i < genomes.count else { return }
+        guard i >= 0, i < genomes.count else { return }
         genomes[i].alive = false
     }
 
-    func shouldFlap(birdIndex: Int, birdY: Double, topY: Double, botY: Double, dist: Double, height: Double) -> Bool {
+    // MARK: - Decision
+    func shouldFlap(
+        birdIndex: Int,
+        birdY: Double,
+        topY: Double,
+        botY: Double,
+        dist: Double,
+        height: Double,
+        velY: Double
+    ) -> Bool {
+        guard birdIndex >= 0, birdIndex < genomes.count else { return false }
         let g = genomes[birdIndex]
         guard g.alive else { return false }
 
-        let inputs: [Double] = [
-            birdY / height,
-            topY / height,
-            botY / height,
-            min(dist, 600) / 600.0
-        ]
-        return g.brain.predict(inputs) > 0.5
+        let gapCenter = (topY + botY) * 0.5
+        let gapSize = max(1.0, topY - botY)
+        let relY = (birdY - gapCenter) / gapSize
+        let relDist = min(dist, 600) / 600.0
+        let normVelY = max(-600.0, min(600.0, velY)) / 600.0
+        let normGap = gapSize / height
+
+        let inputs: [Double] = [ relY, relDist, normVelY, normGap ]
+
+        return g.brain.predict(inputs) > 0.55
     }
 
+    // MARK: - Evolution (with guaranteed best protection)
     func evolveToNextGen() {
+        // 1) sort by fitness
         genomes.sort { $0.fitness > $1.fitness }
 
-        let eliteCount = max(2, popSize / 10)
-        let elites = Array(genomes.prefix(eliteCount))
+        let prevBest = genomes.first
+        let prevBestFitness = prevBest?.fitness ?? 0
+        let prevBestScore = prevBest?.score ?? 0
+        let prevBestDist  = prevBest?.distance ?? 0
 
-        var newGen: [Genome] = []
+        // MARK: - Update Hall of Fame
+        if let best = prevBest {
+            let entry = (fitness: best.fitness, brain: best.brain.copy())
 
-        // 1) keep elites
-        for e in elites {
-            newGen.append(Genome(brain: e.brain.copy()))
+            // update best ever
+            if bestEver == nil || entry.fitness > bestEver!.fitness {
+                bestEver = entry
+            }
+
+            // add elites from this generation
+            let elites = genomes.prefix(min(20, genomes.count)).map {
+                (fitness: $0.fitness, brain: $0.brain.copy())
+            }
+
+            hall.append(contentsOf: elites)
+
+            // sort and cap hall
+            hall.sort { $0.fitness > $1.fitness }
+            if hall.count > hallSize { hall = Array(hall.prefix(hallSize)) }
+
+            // guarantee bestEver is always present
+            if let be = bestEver {
+                if !hall.contains(where: { abs($0.fitness - be.fitness) < 0.0001 }) {
+                    hall.append(be)
+                    hall.sort { $0.fitness > $1.fitness }
+                    if hall.count > hallSize { hall = Array(hall.prefix(hallSize)) }
+                }
+            }
         }
 
-        // 2) children = average of 2 elites + tiny mutation
+        // 2) Parent pool from current generation
+        let parentPool = genomes.prefix(min(30, genomes.count)).map { $0.brain }
+        if parentPool.isEmpty {
+            genomes = (0..<popSize).map { _ in Genome(brain: NeuralNetwork()) }
+            generation += 1
+            print("=== Gen \(generation) (reset) prevBest=\(prevBestFitness) ===")
+            return
+        }
+
+        // 3) Build next generation
+        var newGen: [Genome] = []
+        newGen.reserveCapacity(popSize)
+
+        // ✅ Inject Hall-of-Fame elites first (never lost)
+        let hofCount = min(hall.count, max(5, popSize / 10))
+        for i in 0..<hofCount {
+            newGen.append(Genome(brain: hall[i].brain.copy()))
+        }
+
+        // Then inject current generation elites
+        let eliteCount = min(max(5, popSize / 10), popSize - newGen.count)
+        for i in 0..<eliteCount {
+            newGen.append(Genome(brain: parentPool[i % parentPool.count].copy()))
+        }
+
+        // Fill rest with mutation & crossover
         while newGen.count < popSize {
-            let p1 = elites.randomElement()!
-            let p2 = elites.randomElement()!
+            let idx = newGen.count
+            let brain: NeuralNetwork
 
-            let child = NeuralNetwork.average(p1.brain, p2.brain)
-            child.tinyMutate(chance: 0.03, amount: 0.08)
+            if idx < min(25, popSize) {
+                brain = parentPool[idx % parentPool.count].copy()
+                brain.mutate(rate: 0.12, amount: 0.12)
+            } else {
+                let p1 = parentPool[Int.random(in: 0..<min(10, parentPool.count))]
+                let p2 = parentPool[Int.random(in: 0..<min(15, parentPool.count))]
+                brain = NeuralNetwork.crossover(p1, p2)
+                brain.mutate(rate: 0.18, amount: 0.12)
+            }
 
-            newGen.append(Genome(brain: child))
+            newGen.append(Genome(brain: brain))
         }
 
         genomes = newGen
         generation += 1
-        print("=== Generation \(generation) === best fitness \(genomes.first?.fitness ?? 0)")
+
+        let bestEverFitness = bestEver?.fitness ?? 0
+        print("=== Gen \(generation) prevBestFitness=\(prevBestFitness) (score=\(prevBestScore), dist=\(prevBestDist)) bestEver=\(bestEverFitness) ===")
     }
 }
+
