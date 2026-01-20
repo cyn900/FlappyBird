@@ -88,7 +88,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: - Multi birds
     private var birds: [SKSpriteNode] = []
-    private let birdCount = 100
+    private let birdCount = 200
     
     // NN manager (from your NN file)
     private lazy var ai = FlappyAI(popSize: birdCount)
@@ -235,8 +235,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             b.zPosition = birdPrototype.zPosition
 
             // small vertical offsets
-            let offsetY: CGFloat = CGFloat(i - birdCount/2) * (b.size.height * 0.15)
-            let startPosScene = CGPoint(x: birdXScene, y: baseYScene + offsetY)
+//            let offsetY: CGFloat = CGFloat(i - birdCount/2) * (b.size.height * 0.15)
+            let startPosScene = CGPoint(x: birdXScene, y: baseYScene)
             b.position = sceneToWorld(startPosScene)
 
             guard let body = b.physicsBody else {
