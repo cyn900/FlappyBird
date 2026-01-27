@@ -422,8 +422,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             
             let velY = Double(body.velocity.dy)
 
-            if ai.shouldFlap(birdIndex: i, birdY: birdY, topY: topY, botY: botY, dist: dist, height: h, velY: velY) {
-                body.velocity = CGVector(dx: body.velocity.dx, dy: flapVelocityTarget)
+            if ai.shouldFlap(birdIndex: i, birdY: birdY, topY: topY, botY: botY, dist: dist, velY: velY, height: h) {                body.velocity = CGVector(dx: body.velocity.dx, dy: flapVelocityTarget)
             }
         }
 
