@@ -374,5 +374,51 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         // - compute inputs (birdY, topY, botY, dist, velY, etc.)
         // - ask your NN if it should flap
         // - if yes -> set dy to flapVelocityTarget
+//        runTime += dt
+//
+//        let worldMinY = groundNode.frame.maxY
+//        let worldMaxY = ceilingNode.frame.minY
+//        let h = Double(worldMaxY - worldMinY)
+//
+//        // choose the next pipe relative to a reference X near bird spawn
+//        let refX = sceneXToWorld(frame.minX + frame.width * 0.2)
+//        let nextPipe = pipes.first { $0.x + 22 > refX }
+//
+//        for (i, b) in birds.enumerated() {
+//            guard let body = b.physicsBody, body.isDynamic else { continue }
+//
+//            // Optional fitness tick
+//            ai.tickAlive(i: i, distance: runTime)
+//
+//            let birdY = Double(b.position.y - worldMinY)
+//            let velY  = Double(body.velocity.dy)
+//
+//            let topY: Double
+//            let botY: Double
+//            let dist: Double
+//
+//            if let p = nextPipe {
+//                topY = Double(p.gapTopY - worldMinY)
+//                botY = Double(p.gapBotY - worldMinY)
+//                dist = Double(max(0, p.x - b.position.x))
+//            } else {
+//                topY = h
+//                botY = 0
+//                dist = 600
+//            }
+//
+//            if ai.shouldFlap(
+//                birdIndex: i,
+//                birdY: birdY,
+//                topY: topY,
+//                botY: botY,
+//                dist: dist,
+//                velY: velY,
+//                height: h
+//            ) {
+//                body.velocity = CGVector(dx: body.velocity.dx, dy: flapVelocityTarget)
+//            }
+//        }
+
     }
 }
