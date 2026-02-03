@@ -10,7 +10,6 @@ final class GameViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        // 1) 用 AutoLayout 让 SKView 永远贴满屏幕（含旋转/安全区）
         skView = SKView()
         skView.translatesAutoresizingMaskIntoConstraints = false
         skView.ignoresSiblingOrder = true
