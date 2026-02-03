@@ -27,6 +27,13 @@ enum PhysicsCategory {
 // This is the main game loop controller.
 // It owns the world, spawns birds and pipes, handles input, collisions, and scoring.
 final class GameScene: SKScene, SKPhysicsContactDelegate {
+    
+//    // [NN] Step 1
+//    //Create AI manager (the class lives in another file)
+//    private lazy var ai = FlappyAI(popSize: birdCount)
+//    // time/distance used as fitness
+//    private var runTime: Double = 0
+
 
     // MARK: Scene nodes loaded from GameScene.sks
     // These are defined visually in the SpriteKit Scene Editor.
@@ -194,6 +201,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         spawnBirds()
         spawnPipe()
+        
+//        // [NN] Step 5
+//        runTime = 0
+//        ai.resetRunState()
     }
 
     // MARK: Bird spawning
@@ -308,11 +319,22 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let b = birds[idx]
         b.alpha = 0
         b.physicsBody?.isDynamic = false
-
+        
+//        // [NN] Step 4
+//        // Replace bottom if statement with this to allow train/evolve
+//        ai.tickAlive(i: idx, distance: runTime)
+//        ai.kill(i: idx)
+//
+//        if birds.allSatisfy({ $0.physicsBody?.isDynamic == false }) {
+//            ai.evolveToNextGen()
+//            triggerGameOver()
+//        }
+//        
         // If all birds are dead, trigger restart
         if birds.allSatisfy({ $0.physicsBody?.isDynamic == false }) {
             triggerGameOver()
         }
+
     }
 
     private func triggerGameOver() {
@@ -368,16 +390,25 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 if !p.passed && p.x + 35 < leadX {
                     p.passed = true
                     score += 1
+                    
+//                    // [NN] Step 2
+//                    // Allow score tracking
+//                    for i in birds.indices {
+//                        if birds[i].physicsBody?.isDynamic == true {
+//                            ai.addScore(i: i)
+//                        }
+//                    }
+
                     best = max(best, score)
                     updateHUD()
                 }
             }
         }
 
-        // [NN STEP] Later in the workshop, you’ll add:
-        // - compute inputs (birdY, topY, botY, dist, velY, etc.)
-        // - ask your NN if it should flap
-        // - if yes -> set dy to flapVelocityTarget
+//        // [NN] Step 3
+//        // - compute inputs (birdY, topY, botY, dist, velY, etc.)
+//        // - ask your NN if it should flap
+//        // - if yes -> set dy to flapVelocityTarget
 //        runTime += dt
 //
 //        let worldMinY = groundNode.frame.maxY
@@ -391,7 +422,6 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 //        for (i, b) in birds.enumerated() {
 //            guard let body = b.physicsBody, body.isDynamic else { continue }
 //
-//            // Optional fitness tick
 //            ai.tickAlive(i: i, distance: runTime)
 //
 //            let birdY = Double(b.position.y - worldMinY)
