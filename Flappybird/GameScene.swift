@@ -17,10 +17,10 @@ import UIKit
 // Each physics body in SpriteKit belongs to one or more categories.
 // These bitmasks let us control which objects collide or trigger contacts.
 enum PhysicsCategory {
-    static let bird: UInt32    = 1 << 0
-    static let pipe: UInt32    = 1 << 1
-    static let ground: UInt32  = 1 << 2
-    static let ceiling: UInt32 = 1 << 3
+    static let bird: UInt32    = 1 << 0 // 0001
+    static let pipe: UInt32    = 1 << 1 // 0010
+    static let ground: UInt32  = 1 << 2 // 0100
+    static let ceiling: UInt32 = 1 << 3 // 1000
 }
 
 // MARK: - Game Scene
@@ -48,7 +48,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var birds: [SKSpriteNode] = []
     
     // ADJUSTABLE: Number of birds to spawn
-    private let birdCount = 200
+    private let birdCount = 1
 
     // MARK: Pipes
     private var pipes: [Pipe] = []
@@ -391,7 +391,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                     p.passed = true
                     score += 1
                     
-//                    // [NN] Step 2
+//                    // [NN] Step 3
 //                    // Allow score tracking
 //                    for i in birds.indices {
 //                        if birds[i].physicsBody?.isDynamic == true {
@@ -405,7 +405,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
-//        // [NN] Step 3
+//        // [NN] Step 2
 //        // - compute inputs (birdY, topY, botY, dist, velY, etc.)
 //        // - ask your NN if it should flap
 //        // - if yes -> set dy to flapVelocityTarget
