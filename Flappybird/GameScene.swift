@@ -48,7 +48,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     private var birds: [SKSpriteNode] = []
     
     // ADJUSTABLE: Number of birds to spawn
-    private let birdCount = 1
+    private let birdCount = 200
 
     // MARK: Pipes
     private var pipes: [Pipe] = []
@@ -409,38 +409,61 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 //        // - compute inputs (birdY, topY, botY, dist, velY, etc.)
 //        // - ask your NN if it should flap
 //        // - if yes -> set dy to flapVelocityTarget
+//        // How long the bird has survived (used for fitness / scoring)
 //        runTime += dt
 //
+//        // Define vertical bounds of the playable area
+//        // (ground to ceiling, ignoring UI space)
 //        let worldMinY = groundNode.frame.maxY
 //        let worldMaxY = ceilingNode.frame.minY
 //        let h = Double(worldMaxY - worldMinY)
 //
-//        // choose the next pipe relative to a reference X near bird spawn
+//        // Choose a reference X near the bird’s spawn position.
+//        // This helps us consistently pick the "next" pipe.
 //        let refX = sceneXToWorld(frame.minX + frame.width * 0.2)
+//
+//        // Find the next pipe in front of the bird
+//        // (+22 is a small offset to avoid edge cases)
 //        let nextPipe = pipes.first { $0.x + 22 > refX }
 //
+//        // Loop through all birds (supports multi-bird / multi-agent AI)
 //        for (i, b) in birds.enumerated() {
+//
+//            // Skip birds that are already dead or inactive
 //            guard let body = b.physicsBody, body.isDynamic else { continue }
 //
+//            // Tell the AI this bird is still alive
+//            // (used for fitness tracking / evolution later)
 //            ai.tickAlive(i: i, distance: runTime)
 //
+//            // Normalize bird position relative to the ground
 //            let birdY = Double(b.position.y - worldMinY)
+//
+//            // Current vertical velocity of the bird
 //            let velY  = Double(body.velocity.dy)
 //
+//            // Values describing the gap in the next pipe
 //            let topY: Double
 //            let botY: Double
+//
+//            // Horizontal distance from bird to next pipe
 //            let dist: Double
 //
 //            if let p = nextPipe {
+//                // Pipe exists → use its actual gap position
 //                topY = Double(p.gapTopY - worldMinY)
 //                botY = Double(p.gapBotY - worldMinY)
 //                dist = Double(max(0, p.x - b.position.x))
 //            } else {
+//                // No pipe yet → give safe default values
+//                // (prevents crashes and keeps NN stable)
 //                topY = h
 //                botY = 0
 //                dist = 600
 //            }
 //
+//            // Ask the neural network whether the bird should flap
+//            // based on the current game state
 //            if ai.shouldFlap(
 //                birdIndex: i,
 //                birdY: birdY,
@@ -450,7 +473,11 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 //                velY: velY,
 //                height: h
 //            ) {
-//                body.velocity = CGVector(dx: body.velocity.dx, dy: flapVelocityTarget)
+//                // NN decided to flap → apply upward velocity
+//                body.velocity = CGVector(
+//                    dx: body.velocity.dx,
+//                    dy: flapVelocityTarget
+//                )
 //            }
 //        }
 
