@@ -99,30 +99,33 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         world = w
 
-        guard let bp = childNode(withName: "World/birdPrototype") as? SKSpriteNode else {
+        guard let bp = w.childNode(withName: "birdPrototype") as? SKSpriteNode else {
             fatalError("Missing SKSpriteNode named birdPrototype")
         }
         birdPrototype = bp
         birdPrototype.removeFromParent()
 
-        guard let pp = childNode(withName: "World/pipePrototype") else {
+        guard let pp = w.childNode(withName: "pipePrototype") else {
             fatalError("Missing node named pipePrototype")
         }
         pipePrototype = pp
         pipePrototype.removeFromParent()
 
-        guard let g = childNode(withName: "World/ground") as? SKSpriteNode else {
+        guard let g = w.childNode(withName: "ground") as? SKSpriteNode else {
             fatalError("Missing node named ground")
         }
-        guard let c = childNode(withName: "World/ceiling") as? SKSpriteNode else {
+        guard let c = w.childNode(withName: "ceiling") as? SKSpriteNode else {
             fatalError("Missing node named ceiling")
         }
         groundNode = g
         ceilingNode = c
 
-        scoreLbl = childNode(withName: "HUD/scoreLabel") as? SKLabelNode
-        bestLbl  = childNode(withName: "HUD/bestLabel")  as? SKLabelNode
+        guard let hud = childNode(withName: "HUD") else {
+            fatalError("Missing node named HUD")
+        }
 
+        scoreLbl = hud.childNode(withName: "scoreLabel") as? SKLabelNode
+        bestLbl  = hud.childNode(withName: "bestLabel")  as? SKLabelNode
         pipeGap = computeGapFromPipePrototypeFrames(
             template: pipePrototype,
             minGap: CGFloat(80)
