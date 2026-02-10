@@ -22,8 +22,8 @@ final class GameViewController: UIViewController {
             skView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
 
-        // 2) 从 .sks 加载场景
-        guard let scene = SKScene(fileNamed: "GameScene") as? GameScene else {
+
+        guard let scene = SKScene(fileNamed: "GameScene2") as? GameScene else {
             fatalError("Could not load GameScene.sks")
         }
 
