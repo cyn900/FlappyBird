@@ -2,20 +2,19 @@
 //  GameScene.swift
 //  Flappybird
 //
-//  Workshop version (PRE-NN):
-//  - Multi-bird (manual tap flaps ALL birds)
+//  Workshop version (Feature-Flagged):
+//  - Multi-bird (manual tap flaps ALL birds) when NN flag is OFF
 //  - Pipes move + spawn
 //  - Collision kills bird
 //  - Auto-restart when all birds are dead
 //  - Uses .sks physics bodies (no rebuild)
+//  - Neural Network mode when NN flag is ON
 //
 
 import SpriteKit
 import UIKit
 
 // MARK: - Physics Categories
-// Each physics body in SpriteKit belongs to one or more categories.
-// These bitmasks let us control which objects collide or trigger contacts.
 enum PhysicsCategory {
     static let bird: UInt32    = 1 << 0 // 0001
     static let pipe: UInt32    = 1 << 1 // 0010
@@ -24,100 +23,94 @@ enum PhysicsCategory {
 }
 
 // MARK: - Game Scene
-// This is the main game loop controller.
-// It owns the world, spawns birds and pipes, handles input, collisions, and scoring.
 final class GameScene: SKScene, SKPhysicsContactDelegate {
-    
-//    // [NN] Step 1
-//    //Create AI manager (the class lives in another file)
-//    private lazy var ai = FlappyAI(popSize: birdCount)
-//    // time/distance used as fitness
-//    private var runTime: Double = 0
 
+    // MARK: Feature Flags
+    private enum FeatureFlags {
+        // Flip this to switch between workshop manual mode and NN mode
+        static let useNeuralNetwork = false
+    }
+
+    // MARK: NN / AI (only created if feature flag is ON)
+    private lazy var ai: FlappyAI? = {
+        guard FeatureFlags.useNeuralNetwork else { return nil }
+        return FlappyAI(popSize: birdCount)
+    }()
+
+    // time/distance used as fitness
+    private var runTime = Double(0)
 
     // MARK: Scene nodes loaded from GameScene.sks
-    // These are defined visually in the SpriteKit Scene Editor.
-    private var world: SKNode!              // Root container for all moving objects
+    private var world: SKNode!               // Root container for all moving objects
     private var birdPrototype: SKSpriteNode! // Template bird used for cloning
     private var pipePrototype: SKNode!       // Template pipe pair used for cloning
     private var groundNode: SKSpriteNode!    // Invisible collision ground
     private var ceilingNode: SKSpriteNode!   // Invisible collision ceiling
 
     // MARK: Birds
-    // Supports multiple birds (useful for experiments or AI later)
-    private var birds: [SKSpriteNode] = []
-    
+    private var birds = [SKSpriteNode]()
     // ADJUSTABLE: Number of birds to spawn
-    private let birdCount = 1
+    private let birdCount = Int(100)
 
     // MARK: Pipes
-    private var pipes: [Pipe] = []
-    
+    private var pipes = [Pipe]()
+
     // Gameplay-controlled pipe gap.
-    // This default value is a fallback and will be
-    // OVERWRITTEN after reading the pipe prototype from the SKS file in didMove().
-    private var pipeGap: CGFloat = 130       // Vertical opening between pipes
-    
+    private var pipeGap = CGFloat(130)   // Vertical opening between pipes, overwritten from SKS in didMove()
     // ADJUSTABLE: Leftward (moving to the left) movement speed
-    private let pipeSpeed: CGFloat = -2.5    // Larger absolute value = faster movement.
-    
+    private let pipeSpeed = CGFloat(-2.5)   // Larger absolute value = faster movement.
     // ADJUSTABLE: Distance between pipe spawns
-    private let spawnDist: CGFloat = 300
-    
-    private var pipeSpawnProgress: CGFloat = 0
+    private let spawnDist = CGFloat(300)
+
+    private var pipeSpawnProgress = CGFloat(0)
 
     // MARK: Physics tuning
-    // ADJUSTABLE (game feel): Downward gravity applied to birds.
-    private let gravityY: CGFloat = -12
-    
-    // ADJUSTABLE (game feel): Upward velocity applied when a bird flaps.
-    private var flapVelocityTarget: CGFloat = 320  // Computed again in didMove() to match sprite/world scale.
+
+    // ADJUSTABLE: Downward gravity applied to birds.
+    private let gravityY = CGFloat(-12)
+
+    // ADJUSTABLE: Upward velocity applied when a bird flaps.
+    private var flapVelocityTarget = CGFloat(320)   // Computed again in didMove() to match world scale.
 
     // MARK: Timing & state
-    private var lastUpdateTime: TimeInterval = 0
-    private var didInit = false               // Prevents double initialization
+    private var lastUpdateTime = TimeInterval(0)
+    private var didInit = Bool(false)
 
-    private var gameOver = false
+    private var gameOver = Bool(false)
     private var restartAt: TimeInterval? = nil
 
-    // MARK: HUD (Heads-Up Display)
+    // MARK: HUD
     private var scoreLbl: SKLabelNode?
     private var bestLbl: SKLabelNode?
-    private var score = 0
-    private var best = 0
+    private var score = Int(0)
+    private var best = Int(0)
 
     // MARK: Scene setup
     override func didMove(to view: SKView) {
-        // didMove can be called multiple times; guard ensures one-time setup
         guard !didInit else { return }
         didInit = true
 
-        // Configure physics world
         physicsWorld.gravity = CGVector(dx: 0, dy: gravityY)
         physicsWorld.contactDelegate = self
 
-        // Fetch nodes created in the .sks file
+        // Prefer // paths so SKS hierarchy changes don't break lookups
         guard let w = childNode(withName: "//World") else {
             fatalError("Missing node named World")
         }
         world = w
 
-        // Load bird prototype and remove it from the scene
-        // (we will clone it at runtime)
         guard let bp = childNode(withName: "//birdPrototype") as? SKSpriteNode else {
             fatalError("Missing SKSpriteNode named birdPrototype")
         }
         birdPrototype = bp
         birdPrototype.removeFromParent()
 
-        // Load pipe prototype and remove it from the scene
         guard let pp = childNode(withName: "//pipePrototype") else {
             fatalError("Missing node named pipePrototype")
         }
         pipePrototype = pp
         pipePrototype.removeFromParent()
 
-        // Ground and ceiling are collision boundaries
         guard let g = childNode(withName: "//ground") as? SKSpriteNode else {
             fatalError("Missing node named ground")
         }
@@ -127,44 +120,40 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         groundNode = g
         ceilingNode = c
 
-        // HUD labels
         scoreLbl = childNode(withName: "//scoreLabel") as? SKLabelNode
         bestLbl  = childNode(withName: "//bestLabel")  as? SKLabelNode
 
-        // Compute gap size dynamically from the pipe prototype
         pipeGap = computeGapFromPipePrototypeFrames(
             template: pipePrototype,
-            minGap: 80
+            minGap: CGFloat(80)
         )
 
-        // Compute flap strength so the game feels consistent at different scales
         flapVelocityTarget = computeFlapVelocityTarget()
 
         resetGame()
     }
 
     // MARK: Coordinate helpers (Scene <-> World)
-    // Converts points from the scene coordinate system into the world node.
     private func sceneToWorld(_ p: CGPoint) -> CGPoint {
         world.convert(p, from: self)
     }
 
     private func sceneXToWorld(_ x: CGFloat) -> CGFloat {
-        sceneToWorld(CGPoint(x: x, y: 0)).x
+        sceneToWorld(CGPoint(x: x, y: CGFloat(0))).x
     }
 
     // MARK: Gap calculation
-    // Reads the visual gap from the prototype pipes in the SKS file.
     private func computeGapFromPipePrototypeFrames(
         template: SKNode,
         minGap: CGFloat
     ) -> CGFloat {
 
+        // NOTE: `template` is already the pipePrototype node; search within it.
         guard
             let top = template.childNode(withName: "//pipeTop") as? SKSpriteNode,
             let bot = template.childNode(withName: "//pipeBottom") as? SKSpriteNode
         else {
-            return max(130, minGap)
+            return max(CGFloat(130), minGap)
         }
 
         let gap = top.frame.minY - bot.frame.maxY
@@ -172,28 +161,27 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     // MARK: Flap tuning
-    // Adjusts flap strength based on bird size and world scale.
     private func computeFlapVelocityTarget() -> CGFloat {
         let birdHeight = birdPrototype.size.height * birdPrototype.yScale
-        let baseline: CGFloat = 16
-        let sizeScale = max(0.8, min(2.0, birdHeight / baseline))
-        let worldScale = max(0.001, world.yScale)
-        return (320 * sizeScale) / worldScale
+        let baseline = CGFloat(16)
+        let sizeScale = max(CGFloat(0.8), min(CGFloat(2.0), birdHeight / baseline))
+        let worldScale = max(CGFloat(0.001), world.yScale)
+        return (CGFloat(320) * sizeScale) / worldScale
     }
 
     // MARK: Reset game state
     private func resetGame() {
         gameOver = false
         restartAt = nil
-        lastUpdateTime = 0
+        lastUpdateTime = TimeInterval(0)
 
-        score = 0
+        score = Int(0)
         updateHUD()
 
         // Remove all pipes
         pipes.forEach { $0.remove() }
         pipes.removeAll()
-        pipeSpawnProgress = 0
+        pipeSpawnProgress = CGFloat(0)
 
         // Remove all birds
         birds.forEach { $0.removeFromParent() }
@@ -201,15 +189,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         spawnBirds()
         spawnPipe()
-        
-//        // [NN] Step 5
-//        runTime = 0
-//        ai.resetRunState()
+
+        // NN run reset
+        runTime = Double(0)
+        ai?.resetRunState()
     }
 
     // MARK: Bird spawning
     private func spawnBirds() {
-        let birdXScene = frame.minX + frame.width * 0.2
+        let birdXScene = frame.minX + frame.width * CGFloat(0.2)
         let baseYScene = frame.midY
 
         for _ in 0..<birdCount {
@@ -217,21 +205,18 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                 fatalError("birdPrototype must be an SKSpriteNode")
             }
 
-            // Match the prototype visuals
+            // Match prototype visuals (important when copying from SKS)
             b.size = birdPrototype.size
             b.xScale = birdPrototype.xScale
             b.yScale = birdPrototype.yScale
             b.zPosition = birdPrototype.zPosition
 
-            // Place bird in the world
             b.position = sceneToWorld(CGPoint(x: birdXScene, y: baseYScene))
 
-            // Bird physics must already be configured in the SKS file
             guard let body = b.physicsBody else {
                 fatalError("birdPrototype must have a physicsBody set in the Scene Editor")
             }
 
-            // Configure collision rules
             body.categoryBitMask = PhysicsCategory.bird
             body.contactTestBitMask =
                 PhysicsCategory.pipe |
@@ -258,17 +243,17 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         let worldMinY = groundNode.frame.maxY
         let worldMaxY = ceilingNode.frame.minY
 
-        let minGapCenter = worldMinY + pipeGap * 0.5
-        let maxGapCenter = worldMaxY - pipeGap * 0.5
+        let minGapCenter = worldMinY + pipeGap * CGFloat(0.5)
+        let maxGapCenter = worldMaxY - pipeGap * CGFloat(0.5)
 
         let gapYWorld: CGFloat
         if minGapCenter < maxGapCenter {
             gapYWorld = CGFloat.random(in: minGapCenter...maxGapCenter)
         } else {
-            gapYWorld = (worldMinY + worldMaxY) * 0.5
+            gapYWorld = (worldMinY + worldMaxY) * CGFloat(0.5)
         }
 
-        let xWorld = sceneXToWorld(frame.maxX + 60)
+        let xWorld = sceneXToWorld(frame.maxX + CGFloat(60))
 
         let pipe = Pipe(
             template: pipePrototype,
@@ -285,7 +270,10 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: Input
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        flapAll()
+        // Manual mode only
+        if !FeatureFlags.useNeuralNetwork {
+            flapAll()
+        }
     }
 
     private func flapAll() {
@@ -317,37 +305,36 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         guard let idx = birds.firstIndex(where: { $0 === bird }) else { return }
 
         let b = birds[idx]
-        b.alpha = 0
+        b.alpha = CGFloat(0)
         b.physicsBody?.isDynamic = false
-        
-//        // [NN] Step 4
-//        // Replace bottom if statement with this to allow train/evolve
-//        ai.tickAlive(i: idx, distance: runTime)
-//        ai.kill(i: idx)
-//
-//        if birds.allSatisfy({ $0.physicsBody?.isDynamic == false }) {
-//            ai.evolveToNextGen()
-//            triggerGameOver()
-//        }
-//        
-        // If all birds are dead, trigger restart
-        if birds.allSatisfy({ $0.physicsBody?.isDynamic == false }) {
-            triggerGameOver()
+
+        // NN fitness tracking
+        if FeatureFlags.useNeuralNetwork {
+            ai?.tickAlive(i: idx, distance: runTime)
+            ai?.kill(i: idx)
         }
 
+        // If all birds are dead, evolve (if enabled) and restart
+        if birds.allSatisfy({ $0.physicsBody?.isDynamic == false }) {
+            if FeatureFlags.useNeuralNetwork {
+                ai?.evolveToNextGen()
+            }
+            triggerGameOver()
+        }
     }
 
     private func triggerGameOver() {
         guard !gameOver else { return }
         gameOver = true
-        restartAt = lastUpdateTime + 0.6
+        restartAt = lastUpdateTime + TimeInterval(0.6)
     }
 
     // MARK: Game loop
     override func update(_ currentTime: TimeInterval) {
+
         let dt: TimeInterval
         if lastUpdateTime == 0 {
-            dt = 1.0 / 60.0
+            dt = TimeInterval(1.0 / 60.0)
         } else {
             dt = currentTime - lastUpdateTime
         }
@@ -367,7 +354,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         // Remove pipes that leave the screen
         let leftWorld = sceneXToWorld(frame.minX)
         pipes.removeAll { p in
-            if p.x < leftWorld - 120 {
+            if p.x < leftWorld - CGFloat(120) {
                 p.remove()
                 return true
             }
@@ -378,26 +365,25 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         pipeSpawnProgress += abs(pipeSpeed)
         if pipeSpawnProgress >= spawnDist {
             spawnPipe()
-            pipeSpawnProgress = 0
+            pipeSpawnProgress = CGFloat(0)
         }
 
-        // Scoring logic:
-        // Count when the leading alive bird passes a pipe
+        // Scoring logic (lead alive bird passes a pipe)
         let aliveBirds = birds.filter { $0.physicsBody?.isDynamic == true }
         if let lead = aliveBirds.max(by: { $0.position.x < $1.position.x }) {
             let leadX = lead.position.x
             for p in pipes {
-                if !p.passed && p.x + 35 < leadX {
+                if !p.passed && p.x + CGFloat(35) < leadX {
                     p.passed = true
                     score += 1
-                    
-//                    // [NN] Step 3
-//                    // Allow score tracking
-//                    for i in birds.indices {
-//                        if birds[i].physicsBody?.isDynamic == true {
-//                            ai.addScore(i: i)
-//                        }
-//                    }
+
+                    if FeatureFlags.useNeuralNetwork {
+                        for i in birds.indices {
+                            if birds[i].physicsBody?.isDynamic == true {
+                                ai?.addScore(i: i)
+                            }
+                        }
+                    }
 
                     best = max(best, score)
                     updateHUD()
@@ -405,81 +391,56 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
-//        // [NN] Step 2
-//        // - compute inputs (birdY, topY, botY, dist, velY, etc.)
-//        // - ask your NN if it should flap
-//        // - if yes -> set dy to flapVelocityTarget
-//        // How long the bird has survived (used for fitness / scoring)
-//        runTime += dt
-//
-//        // Define vertical bounds of the playable area
-//        // (ground to ceiling, ignoring UI space)
-//        let worldMinY = groundNode.frame.maxY
-//        let worldMaxY = ceilingNode.frame.minY
-//        let h = Double(worldMaxY - worldMinY)
-//
-//        // Choose a reference X near the bird’s spawn position.
-//        // This helps us consistently pick the "next" pipe.
-//        let refX = sceneXToWorld(frame.minX + frame.width * 0.2)
-//
-//        // Find the next pipe in front of the bird
-//        // (+22 is a small offset to avoid edge cases)
-//        let nextPipe = pipes.first { $0.x + 22 > refX }
-//
-//        // Loop through all birds (supports multi-bird / multi-agent AI)
-//        for (i, b) in birds.enumerated() {
-//
-//            // Skip birds that are already dead or inactive
-//            guard let body = b.physicsBody, body.isDynamic else { continue }
-//
-//            // Tell the AI this bird is still alive
-//            // (used for fitness tracking / evolution later)
-//            ai.tickAlive(i: i, distance: runTime)
-//
-//            // Normalize bird position relative to the ground
-//            let birdY = Double(b.position.y - worldMinY)
-//
-//            // Current vertical velocity of the bird
-//            let velY  = Double(body.velocity.dy)
-//
-//            // Values describing the gap in the next pipe
-//            let topY: Double
-//            let botY: Double
-//
-//            // Horizontal distance from bird to next pipe
-//            let dist: Double
-//
-//            if let p = nextPipe {
-//                // Pipe exists → use its actual gap position
-//                topY = Double(p.gapTopY - worldMinY)
-//                botY = Double(p.gapBotY - worldMinY)
-//                dist = Double(max(0, p.x - b.position.x))
-//            } else {
-//                // No pipe yet → give safe default values
-//                // (prevents crashes and keeps NN stable)
-//                topY = h
-//                botY = 0
-//                dist = 600
-//            }
-//
-//            // Ask the neural network whether the bird should flap
-//            // based on the current game state
-//            if ai.shouldFlap(
-//                birdIndex: i,
-//                birdY: birdY,
-//                topY: topY,
-//                botY: botY,
-//                dist: dist,
-//                velY: velY,
-//                height: h
-//            ) {
-//                // NN decided to flap → apply upward velocity
-//                body.velocity = CGVector(
-//                    dx: body.velocity.dx,
-//                    dy: flapVelocityTarget
-//                )
-//            }
-//        }
+        // NN update loop
+        runTime += dt
 
+        if FeatureFlags.useNeuralNetwork {
+
+            let worldMinY = groundNode.frame.maxY
+            let worldMaxY = ceilingNode.frame.minY
+            let h = Double(worldMaxY - worldMinY)
+
+            let refX = sceneXToWorld(frame.minX + frame.width * CGFloat(0.2))
+            let nextPipe = pipes.first { $0.x + CGFloat(22) > refX }
+
+            for (i, b) in birds.enumerated() {
+
+                guard let body = b.physicsBody, body.isDynamic else { continue }
+
+                ai?.tickAlive(i: i, distance: runTime)
+
+                let birdY = Double(b.position.y - worldMinY)
+                let velY  = Double(body.velocity.dy)
+
+                let topY: Double
+                let botY: Double
+                let dist: Double
+
+                if let p = nextPipe {
+                    topY = Double(p.gapTopY - worldMinY)
+                    botY = Double(p.gapBotY - worldMinY)
+                    dist = Double(max(0, p.x - b.position.x))
+                } else {
+                    topY = h
+                    botY = 0
+                    dist = 600
+                }
+
+                if ai?.shouldFlap(
+                    birdIndex: i,
+                    birdY: birdY,
+                    topY: topY,
+                    botY: botY,
+                    dist: dist,
+                    velY: velY,
+                    height: h
+                ) == true {
+                    body.velocity = CGVector(
+                        dx: body.velocity.dx,
+                        dy: flapVelocityTarget
+                    )
+                }
+            }
+        }
     }
 }
