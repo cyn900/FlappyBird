@@ -26,14 +26,11 @@ enum PhysicsCategory {
 final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: Feature Flags
-    private enum FeatureFlags {
-        // Flip this to switch between workshop manual mode and NN mode
-        static let useNeuralNetwork = false
-    }
+    private let useNeuralNetwork = true
 
     // MARK: NN / AI (only created if feature flag is ON)
     private lazy var ai: FlappyAI? = {
-        guard FeatureFlags.useNeuralNetwork else { return nil }
+        guard useNeuralNetwork else { return nil }
         return FlappyAI(popSize: birdCount)
     }()
 
@@ -274,7 +271,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: Input
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         // Manual mode only
-        if !FeatureFlags.useNeuralNetwork {
+        if !useNeuralNetwork {
             flapAll()
         }
     }
@@ -312,14 +309,14 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         b.physicsBody?.isDynamic = false
 
         // NN fitness tracking
-        if FeatureFlags.useNeuralNetwork {
+        if useNeuralNetwork {
             ai?.tickAlive(i: idx, distance: runTime)
             ai?.kill(i: idx)
         }
 
         // If all birds are dead, evolve (if enabled) and restart
         if birds.allSatisfy({ $0.physicsBody?.isDynamic == false }) {
-            if FeatureFlags.useNeuralNetwork {
+            if useNeuralNetwork {
                 ai?.evolveToNextGen()
             }
             triggerGameOver()
@@ -380,7 +377,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                     p.passed = true
                     score += 1
 
-                    if FeatureFlags.useNeuralNetwork {
+                    if useNeuralNetwork {
                         for i in birds.indices {
                             if birds[i].physicsBody?.isDynamic == true {
                                 ai?.addScore(i: i)
@@ -397,7 +394,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         // NN update loop
         runTime += dt
 
-        if FeatureFlags.useNeuralNetwork {
+        if useNeuralNetwork {
 
             let worldMinY = groundNode.frame.maxY
             let worldMaxY = ceilingNode.frame.minY
