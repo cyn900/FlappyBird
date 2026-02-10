@@ -23,7 +23,7 @@ final class GameViewController: UIViewController {
         ])
 
 
-        guard let scene = SKScene(fileNamed: "GameScene2") as? GameScene else {
+        guard let scene = SKScene(fileNamed: "GameScene") as? GameScene else {
             fatalError("Could not load GameScene.sks")
         }
 
