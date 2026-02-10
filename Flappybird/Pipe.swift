@@ -62,8 +62,8 @@ final class Pipe {
         // Find the top and bottom pipe sprites inside the copied node.
         // These names must match what was set in GameScene.sks.
         guard
-            let t = copy.childNode(withName: "//pipeTop") as? SKSpriteNode,
-            let b = copy.childNode(withName: "//pipeBottom") as? SKSpriteNode
+            let t = copy.childNode(withName: "pipeTop") as? SKSpriteNode,
+            let b = copy.childNode(withName: "pipeBottom") as? SKSpriteNode
         else {
             fatalError("pipePrototype must have children named pipeTop and pipeBottom (SKSpriteNode)")
         }

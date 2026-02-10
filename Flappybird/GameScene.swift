@@ -94,34 +94,34 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         physicsWorld.contactDelegate = self
 
         // Prefer // paths so SKS hierarchy changes don't break lookups
-        guard let w = childNode(withName: "//World") else {
+        guard let w = childNode(withName: "World") else {
             fatalError("Missing node named World")
         }
         world = w
 
-        guard let bp = childNode(withName: "//birdPrototype") as? SKSpriteNode else {
+        guard let bp = childNode(withName: "World/birdPrototype") as? SKSpriteNode else {
             fatalError("Missing SKSpriteNode named birdPrototype")
         }
         birdPrototype = bp
         birdPrototype.removeFromParent()
 
-        guard let pp = childNode(withName: "//pipePrototype") else {
+        guard let pp = childNode(withName: "World/pipePrototype") else {
             fatalError("Missing node named pipePrototype")
         }
         pipePrototype = pp
         pipePrototype.removeFromParent()
 
-        guard let g = childNode(withName: "//ground") as? SKSpriteNode else {
+        guard let g = childNode(withName: "World/ground") as? SKSpriteNode else {
             fatalError("Missing node named ground")
         }
-        guard let c = childNode(withName: "//ceiling") as? SKSpriteNode else {
+        guard let c = childNode(withName: "World/ceiling") as? SKSpriteNode else {
             fatalError("Missing node named ceiling")
         }
         groundNode = g
         ceilingNode = c
 
-        scoreLbl = childNode(withName: "//scoreLabel") as? SKLabelNode
-        bestLbl  = childNode(withName: "//bestLabel")  as? SKLabelNode
+        scoreLbl = childNode(withName: "HUD/scoreLabel") as? SKLabelNode
+        bestLbl  = childNode(withName: "HUD/bestLabel")  as? SKLabelNode
 
         pipeGap = computeGapFromPipePrototypeFrames(
             template: pipePrototype,
@@ -150,8 +150,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
 
         // NOTE: `template` is already the pipePrototype node; search within it.
         guard
-            let top = template.childNode(withName: "//pipeTop") as? SKSpriteNode,
-            let bot = template.childNode(withName: "//pipeBottom") as? SKSpriteNode
+            let top = template.childNode(withName: "pipeTop") as? SKSpriteNode,
+            let bot = template.childNode(withName: "pipeBottom") as? SKSpriteNode
         else {
             return max(CGFloat(130), minGap)
         }
