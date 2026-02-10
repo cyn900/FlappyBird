@@ -26,7 +26,7 @@ enum PhysicsCategory {
 final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: Feature Flags
-    private let useNeuralNetwork = true
+    private let useNeuralNetwork = false
 
     // MARK: NN / AI (only created if feature flag is ON)
     private lazy var ai: FlappyAI? = {
@@ -47,7 +47,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: Birds
     private var birds = [SKSpriteNode]()
     // ADJUSTABLE: Number of birds to spawn
-    private let birdCount = Int(100)
+    private let birdCount = Int(1)
 
     // MARK: Pipes
     private var pipes = [Pipe]()
