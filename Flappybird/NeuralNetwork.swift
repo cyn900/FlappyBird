@@ -1,40 +1,28 @@
-//
-//  FlappyAI.swift
-//  Flappybird
-//
-//  GA + NN for SpriteKit (.sks) version (stabilized learning)
-//
-//  Key fixes:
-//  - Champion preservation: best brain is never lost
-//  - Deterministic policy by default (removes evaluation noise)
-//  - Mutation annealing (explore early, refine later)
-//  - Tournament selection (stronger parent selection pressure)
-//  - Weight/bias clipping to avoid drift/explosions
-//
 
-import Foundation
-import UIKit
+import Foundation  // basic tools needed
+
+// MARK: - Global Switch
+struct AIConfig {
+    static var advanced: Bool = false // use advanced mode
+}
 
 // MARK: - Simple Neural Network (4 → 8 → 1)
-
 final class NeuralNetwork {
 
-    // 8 x 4
-    var w1: [[Double]]
-    // 8
-    var w2: [Double]
-    // 8
-    var b1: [Double]
-    // 1
-    var b2: Double
+    var w1: [[Double]]   // importance of each input to hidden neurons
+    var w2: [Double]     // importance of hidden neurons to output
+    var b1: [Double]     // hidden layer adjustment (bias)
+    var b2: Double       // output adjustment (bias)
 
     init(random: Bool = true) {
         if random {
+            // assign random importance so brains start differently
             w1 = (0..<8).map { _ in (0..<4).map { _ in Double.random(in: -1...1) } }
             w2 = (0..<8).map { _ in Double.random(in: -1...1) }
             b1 = (0..<8).map { _ in Double.random(in: -1...1) }
             b2 = Double.random(in: -1...1)
         } else {
+            // create brain with zeroed values
             w1 = Array(repeating: Array(repeating: 0, count: 4), count: 8)
             w2 = Array(repeating: 0, count: 8)
             b1 = Array(repeating: 0, count: 8)
@@ -43,284 +31,173 @@ final class NeuralNetwork {
     }
 
     func copy() -> NeuralNetwork {
-        let n = NeuralNetwork(random: false)
-        n.w1 = w1
-        n.w2 = w2
-        n.b1 = b1
-        n.b2 = b2
-        return n
+        let n = NeuralNetwork(random: false) // new brain container
+        n.w1 = w1  // copy all input importance
+        n.w2 = w2  // copy hidden importance
+        n.b1 = b1  // copy hidden bias
+        n.b2 = b2  // copy output bias
+        return n // return exact copy of brain
     }
-
-    private func relu(_ x: Double) -> Double { max(0.0, x) }
 
     private func sigmoid(_ x: Double) -> Double {
-        let z = max(-60.0, min(60.0, x))
-        return 1.0 / (1.0 + exp(-z))
+        // logic: converts any number into 0-1 chance
+        1.0 / (1.0 + exp(-max(-20, min(20, x))))
     }
 
-    // inputs = 4 normalized features
+    // calculate brain's decision based on input facts
     func predict(_ inputs: [Double]) -> Double {
-        precondition(inputs.count == 4, "NeuralNetwork expects exactly 4 inputs")
+        var hidden = [Double](repeating: 0, count: 8) // store hidden neuron outputs
 
-        var hidden = [Double](repeating: 0, count: 8)
-
+        // compute each hidden neuron
         for i in 0..<8 {
-            var sum = b1[i]
-            for j in 0..<4 { sum += inputs[j] * w1[i][j] }
-            hidden[i] = relu(sum)
+            var sum = b1[i] // start with bias (adjustment)
+            for j in 0..<4 {
+                sum += inputs[j] * w1[i][j] // each fact × importance
+            }
+            hidden[i] = sigmoid(sum) // filter result to 0-1
         }
 
-        var out = b2
-        for i in 0..<8 { out += hidden[i] * w2[i] }
-
-        return sigmoid(out) // 0..1
-    }
-
-    // Small helper to prevent weights drifting too far
-    private func clip(_ x: Double, _ lo: Double, _ hi: Double) -> Double {
-        min(hi, max(lo, x))
-    }
-
-    func clipAll(to limit: Double = 6.0) {
+        // compute output neuron
+        var out = b2 // start with output bias
         for i in 0..<8 {
-            for j in 0..<4 { w1[i][j] = clip(w1[i][j], -limit, limit) }
-            w2[i] = clip(w2[i], -limit, limit)
-            b1[i] = clip(b1[i], -limit, limit)
+            out += hidden[i] * w2[i] // combine all hidden outputs
         }
-        b2 = clip(b2, -limit, limit)
+
+        return sigmoid(out) // final probability to flap
     }
 
-    func mutate(rate: Double, step: Double) {
-        // step controls mutation magnitude (annealed by FlappyAI)
+    // combine two parent brains into a child
+    static func average(_ a: NeuralNetwork, _ b: NeuralNetwork) -> NeuralNetwork {
+        let c = NeuralNetwork(random: false) // new child brain
+
         for i in 0..<8 {
             for j in 0..<4 {
-                if Double.random(in: 0...1) < rate {
-                    w1[i][j] += Double.random(in: -step...step)
+                // logic: mix parent input importance
+                c.w1[i][j] = (a.w1[i][j] + b.w1[i][j]) * 0.5
+            }
+            // logic: mix biases so child is similar to parents
+            c.b1[i] = (a.b1[i] + b.b1[i]) * 0.5
+            c.w2[i] = (a.w2[i] + b.w2[i]) * 0.5
+        }
+        c.b2 = (a.b2 + b.b2) * 0.5 // mix output bias
+        return c // child brain ready
+    }
+
+    // make small random changes to explore new ideas
+    func tinyMutate(chance: Double = 0.03, amount: Double = 0.08) {
+        for i in 0..<8 {
+            for j in 0..<4 {
+                if Double.random(in: 0...1) < chance {
+                    w1[i][j] += Double.random(in: -amount...amount) // small input change
                 }
             }
-            if Double.random(in: 0...1) < rate { b1[i] += Double.random(in: -step...step) }
-            if Double.random(in: 0...1) < rate { w2[i] += Double.random(in: -step...step) }
+            if Double.random(in: 0...1) < chance { b1[i] += Double.random(in: -amount...amount) } // small hidden bias change
+            if Double.random(in: 0...1) < chance { w2[i] += Double.random(in: -amount...amount) } // small hidden-output change
         }
-        if Double.random(in: 0...1) < rate { b2 += Double.random(in: -step...step) }
-
-        clipAll(to: 6.0)
-    }
-
-    static func crossover(_ a: NeuralNetwork, _ b: NeuralNetwork) -> NeuralNetwork {
-        let c = NeuralNetwork(random: false)
-
-        for i in 0..<8 {
-            for j in 0..<4 {
-                c.w1[i][j] = Bool.random() ? a.w1[i][j] : b.w1[i][j]
-            }
-            c.b1[i] = Bool.random() ? a.b1[i] : b.b1[i]
-            c.w2[i] = Bool.random() ? a.w2[i] : b.w2[i]
-        }
-
-        c.b2 = Bool.random() ? a.b2 : b.b2
-        c.clipAll(to: 6.0)
-        return c
+        if Double.random(in: 0...1) < chance { b2 += Double.random(in: -amount...amount) } // small output bias change
     }
 }
 
 // MARK: - Genome
-
 final class Genome {
-    let brain: NeuralNetwork
-    var alive: Bool = true
-    var score: Int = 0
-    var distance: Double = 0
-    let color: UIColor
+    let brain: NeuralNetwork // brain of this bird
+    var alive: Bool = true   // is it still flying?
+    var score: Int = 0       // pipes passed
+    var distance: Double = 0 // how far it traveled
 
-    init(brain: NeuralNetwork) {
-        self.brain = brain
-        self.color = UIColor(
-            hue: CGFloat.random(in: 0...1),
-            saturation: 0.8,
-            brightness: 0.9,
-            alpha: 1.0
-        )
-    }
+    init(brain: NeuralNetwork) { self.brain = brain } // assign brain
 
-    var fitness: Double {
-        // score dominates, distance breaks ties
-        Double(score) * 1000.0 + distance
-    }
+    var fitness: Double { Double(score) * 1000 + distance }
+    // logic: combines score and distance into one "how good" number
 }
 
-// MARK: - FlappyAI
+// MARK: - Flappy AI
+final class FlappyAI: FlappyAIProtocol {
 
-final class FlappyAI {
-
-    private let popSize: Int
-    private(set) var generation: Int = 1
-    private var genomes: [Genome] = []
-
-    // Deterministic policy by default (stable learning curve)
-    var useStochasticPolicy: Bool = false
-    var flapThreshold: Double = 0.5
-
-    // GA knobs
-    var eliteFraction: Double = 0.20          // more stable than 0.10
-    var tournamentK: Int = 5                 // tournament size
-    var baseMutationRate: Double = 0.18      // will anneal down
-    var minMutationRate: Double = 0.05
-    var baseMutationStep: Double = 0.45      // will anneal down
-    var minMutationStep: Double = 0.10
-
-    // Champion (best-ever brain) is preserved across generations
-    private var championBrain: NeuralNetwork?
-    private var championScore: Int = 0
-    private var championFitness: Double = -Double.infinity
+    private let popSize: Int // number of birds per generation
+    private(set) var generation: Int = 1 // which generation
+    private var genomes: [Genome] = [] // all birds
 
     init(popSize: Int) {
         self.popSize = popSize
+        // create initial population with random brains
         genomes = (0..<popSize).map { _ in Genome(brain: NeuralNetwork()) }
     }
 
-    // MARK: - Run control
-
-    func currentSpawnPack() -> [(brain: NeuralNetwork, color: UIColor)] {
-        genomes.map { ($0.brain, $0.color) }
-    }
-
+    // reset game for all birds
     func resetRunState() {
         for g in genomes {
-            g.alive = true
-            g.score = 0
-            g.distance = 0
+            g.alive = true // revive
+            g.score = 0    // reset points
+            g.distance = 0 // reset distance
         }
     }
 
+    // update bird's distance
     func tickAlive(i: Int, distance: Double) {
-        guard i < genomes.count else { return }
-        if genomes[i].alive {
-            genomes[i].distance = max(genomes[i].distance, distance)
-        }
+        guard i < genomes.count, genomes[i].alive else { return } // ignore dead
+        genomes[i].distance = max(genomes[i].distance, distance) // keep best distance
     }
 
+    // add score for passing a pipe
     func addScore(i: Int) {
-        guard i < genomes.count else { return }
-        if genomes[i].alive { genomes[i].score += 1 }
+        guard i < genomes.count, genomes[i].alive else { return }
+        genomes[i].score += 1 // increase points
     }
 
+    // mark bird as dead
     func kill(i: Int) {
         guard i < genomes.count else { return }
-        genomes[i].alive = false
+        genomes[i].alive = false // stop updating
     }
 
-    // MARK: - Decision (gap-centered normalization)
-
-    func shouldFlap(
-        birdIndex: Int,
-        birdY: Double,
-        topY: Double,
-        botY: Double,
-        dist: Double,
-        velY: Double,
-        height: Double
-    ) -> Bool {
-
+    // ask brain if bird should flap
+    func shouldFlap(birdIndex: Int, birdY: Double, topY: Double, botY: Double, dist: Double,velY: Double?, height: Double) -> Bool {
         let g = genomes[birdIndex]
-        guard g.alive else { return false }
+        guard g.alive else { return false } // dead birds don't flap
 
-        let gapCenter = (topY + botY) * 0.5
-        let gapHalf = max(1e-6, (topY - botY) * 0.5)
-
-        // y relative to gap center, scaled by half-gap (≈ -1..1)
-        let yRel = (birdY - gapCenter) / gapHalf
-
-        // vertical velocity normalized (≈ -1..1)
-        let velN = max(-1.0, min(1.0, velY / 400.0))
-
-        // distance to pipe normalized (0..1), cap at 200 (more relevant)
-        let distN = min(max(dist, 0.0), 200.0) / 200.0
-
-        // gap size relative to playable height
-        let gapN = gapHalf / max(1e-6, height)
-
-        let inputs: [Double] = [yRel, velN, distN, gapN]
-        let out = g.brain.predict(inputs) // 0..1
-
-        if useStochasticPolicy {
-            return out > Double.random(in: 0...1)
-        } else {
-            return out > flapThreshold
-        }
+        // convert game state into normalized facts
+        let inputs: [Double] = [
+            birdY / height,       // bird height
+            topY / height,        // top pipe
+            botY / height,        // bottom pipe
+            min(dist, 600) / 600.0 // distance to next pipe
+        ]
+        return g.brain.predict(inputs) > 0.5 // logic: flap if brain says yes
     }
+    
+   func evolve() {
+       evolveToNextGen()
+   }
 
-    // MARK: - Evolution
-
-    private func tournamentPick(from pool: [Genome]) -> Genome {
-        let k = max(2, min(tournamentK, pool.count))
-        var best = pool[Int.random(in: 0..<pool.count)]
-        for _ in 1..<k {
-            let c = pool[Int.random(in: 0..<pool.count)]
-            if c.fitness > best.fitness { best = c }
-        }
-        return best
-    }
-
+    // evolve population to next generation
     func evolveToNextGen() {
-        // Sort by fitness descending
-        genomes.sort { $0.fitness > $1.fitness }
+        genomes.sort { $0.fitness > $1.fitness } // rank birds by fitness
+        let bestFitness = genomes.first?.fitness ?? 0
+        print("=== Generation \(generation) === best fitness \(bestFitness)")
 
-        // Track best of THIS generation (for logging + champion)
-        if let bestNow = genomes.first {
-            if bestNow.fitness > championFitness {
-                championFitness = bestNow.fitness
-                championScore = bestNow.score
-                championBrain = bestNow.brain.copy()
-            }
-        }
-
-        // Elites (carry forward)
-        let eliteCount = max(2, Int(Double(popSize) * eliteFraction))
+        let eliteCount = max(2, popSize / 10) // keep top 10% as parents
         let elites = Array(genomes.prefix(eliteCount))
 
-        // Anneal mutation based on current best score (simple + effective)
-        let bestScore = elites.first?.score ?? 0
-        let rate: Double
-        let step: Double
-        if bestScore < 5 {
-            rate = baseMutationRate
-            step = baseMutationStep
-        } else if bestScore < 12 {
-            rate = max(minMutationRate, 0.12)
-            step = max(minMutationStep, 0.25)
-        } else {
-            rate = max(minMutationRate, 0.06)
-            step = max(minMutationStep, 0.15)
-        }
+        var newGen: [Genome] = [] // new population
 
-        var newGen: [Genome] = []
-        newGen.reserveCapacity(popSize)
-
-        // 1) Champion slot (best-ever) first, always
-        if let champ = championBrain {
-            newGen.append(Genome(brain: champ.copy()))
-        }
-
-        // 2) Fill the rest of the elite slots with current elites (unaltered)
+        // 1) keep elites exactly
         for e in elites {
-            if newGen.count >= eliteCount { break }
-            newGen.append(Genome(brain: e.brain.copy()))
+            newGen.append(Genome(brain: e.brain.copy())) // best birds survive unchanged
         }
 
-        // 3) Create children until popSize using tournament selection from elites
+        // 2) create children
         while newGen.count < popSize {
-            let p1 = tournamentPick(from: elites)
-            let p2 = tournamentPick(from: elites)
+            let p1 = elites.randomElement()! // parent 1
+            let p2 = elites.randomElement()! // parent 2
 
-            let child = NeuralNetwork.crossover(p1.brain, p2.brain)
-            child.mutate(rate: rate, step: step)
-            newGen.append(Genome(brain: child))
+            let child = NeuralNetwork.average(p1.brain, p2.brain) // combine traits
+            child.tinyMutate(chance: 0.03, amount: 0.08) // slight variation
+
+            newGen.append(Genome(brain: child)) // add to population
         }
 
-        genomes = newGen
-        generation += 1
-
-        // Log using champion + best of previous generation
-        print("=== Generation \(generation) === bestScore(gen)=\(bestScore) | championScore=\(championScore) | mutRate=\(String(format: "%.3f", rate)) step=\(String(format: "%.3f", step))")
+        genomes = newGen // replace old population
+        generation += 1 // increment generation counter
     }
 }

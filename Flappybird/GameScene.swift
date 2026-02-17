@@ -3,12 +3,12 @@
 //  Flappybird
 //
 //  Workshop version (Feature-Flagged):
-//  - Multi-bird (manual tap flaps ALL birds) when NN flag is OFF
+//  - Multi-bird (manual tap flaps ALL birds) when AI mode is OFF
 //  - Pipes move + spawn
 //  - Collision kills bird
 //  - Auto-restart when all birds are dead
 //  - Uses .sks physics bodies (no rebuild)
-//  - Neural Network mode when NN flag is ON
+//  - AI mode (regular / advanced) when enabled
 //
 
 import SpriteKit
@@ -22,17 +22,33 @@ enum PhysicsCategory {
     static let ceiling: UInt32 = 1 << 3 // 1000
 }
 
+// MARK: AI Mode
+enum AIMode {
+    case off
+    case regular
+    case advanced
+}
+
 // MARK: - Game Scene
 final class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // MARK: Feature Flags
-    private let useNeuralNetwork = false
+    private let aiMode: AIMode = .off
+    // .off / .regular / .advanced
 
-    // MARK: NN / AI (only created if feature flag is ON)
-    private lazy var ai: FlappyAI? = {
-        guard useNeuralNetwork else { return nil }
-        return FlappyAI(popSize: birdCount)
+    // MARK: AI (only created if mode is not OFF)
+    private lazy var ai: FlappyAIProtocol? = {
+        switch aiMode {
+        case .off:
+            return nil
+        case .regular:
+            return FlappyAI(popSize: birdCount)
+        case .advanced:
+            return AdvancedFlappyAI(popSize: birdCount)
+        }
     }()
+
+    private var isAIModeEnabled: Bool { ai != nil }
 
     // time/distance used as fitness
     private var runTime = Double(0)
@@ -57,7 +73,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // ADJUSTABLE: Leftward (moving to the left) movement speed
     private let pipeSpeed = CGFloat(-2.5)   // Larger absolute value = faster movement.
     // ADJUSTABLE: Distance between pipe spawns
-    private let spawnDist = CGFloat(300)
+    private let spawnDist = CGFloat(400)
 
     private var pipeSpawnProgress = CGFloat(0)
 
@@ -100,6 +116,8 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             fatalError("Missing SKSpriteNode named birdPrototype")
         }
         birdPrototype = bp
+        bp.texture = SKTexture(imageNamed: "bird")
+
         birdPrototype.removeFromParent()
 
         guard let pp = w.childNode(withName: "pipePrototype") else {
@@ -271,7 +289,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: Input
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         // Manual mode only
-        if !useNeuralNetwork {
+        if !isAIModeEnabled {
             flapAll()
         }
     }
@@ -309,15 +327,15 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         b.physicsBody?.isDynamic = false
 
         // NN fitness tracking
-        if useNeuralNetwork {
+        if isAIModeEnabled {
             ai?.tickAlive(i: idx, distance: runTime)
             ai?.kill(i: idx)
         }
 
         // If all birds are dead, evolve (if enabled) and restart
         if birds.allSatisfy({ $0.physicsBody?.isDynamic == false }) {
-            if useNeuralNetwork {
-                ai?.evolveToNextGen()
+            if isAIModeEnabled {
+                ai?.evolve()
             }
             triggerGameOver()
         }
@@ -377,7 +395,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
                     p.passed = true
                     score += 1
 
-                    if useNeuralNetwork {
+                    if isAIModeEnabled {
                         for i in birds.indices {
                             if birds[i].physicsBody?.isDynamic == true {
                                 ai?.addScore(i: i)
@@ -394,7 +412,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
         // NN update loop
         runTime += dt
 
-        if useNeuralNetwork {
+        if isAIModeEnabled {
 
             let worldMinY = groundNode.frame.maxY
             let worldMaxY = ceilingNode.frame.minY
