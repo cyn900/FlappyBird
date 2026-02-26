@@ -116,7 +116,7 @@ final class GameScene: SKScene, SKPhysicsContactDelegate {
             fatalError("Missing SKSpriteNode named birdPrototype")
         }
         birdPrototype = bp
-        bp.texture = SKTexture(imageNamed: "bird")
+//        bp.texture = SKTexture(imageNamed: "bird")
 
         birdPrototype.removeFromParent()
 
