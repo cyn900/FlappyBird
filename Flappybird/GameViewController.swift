@@ -3,18 +3,32 @@ import SpriteKit
 
 
 // MARK: - View Controller
-class GameViewController: UIViewController {
-    
+final class GameViewController: UIViewController {
+
+    private var skView: SKView!
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        
-        // Create the SpriteKit view
-        let skView = SKView(frame: view.bounds)
+
+        skView = SKView()
+        skView.translatesAutoresizingMaskIntoConstraints = false
+        skView.ignoresSiblingOrder = true
         view.addSubview(skView)
-        
-        // Create and present the scene
-        let scene = GameScene(size: skView.bounds.size)
-        scene.scaleMode = .aspectFill
+
+        NSLayoutConstraint.activate([
+            skView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            skView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            skView.topAnchor.constraint(equalTo: view.topAnchor),
+            skView.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+        ])
+
+
+        guard let scene = SKScene(fileNamed: "GameScene") as? GameScene else {
+            fatalError("Could not load GameScene.sks")
+        }
+
+        scene.scaleMode = .aspectFit
+
         skView.presentScene(scene)
     }
 }
