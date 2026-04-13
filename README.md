@@ -7,5 +7,4 @@ Participants will build a working iOS game using Swift and SpriteKit, learning h
 
 ref: https://developer.apple.com/documentation/spritekit
 
-https://github.com/user-attachments/assets/100e3dfd-9c35-46ac-a8e7-3808d6fb9569
 
